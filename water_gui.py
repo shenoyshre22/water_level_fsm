@@ -88,12 +88,32 @@ def run_simulation():
     play_again_button.pack(pady=12)
     press_button.config(state="normal")
 
-def reset_simulation():
-    play_again_button.pack_forget()
-    draw_water(0, 1)
-    root.update()
+def drain_simulation():
+    # disable controls while draining
+    press_button.config(state="disabled")
+    play_again_button.config(state="disabled")
 
-play_again_button.config(command=reset_simulation)
+    # read current percent
+    current_text = level_label.cget("text")
+    try:
+        cur_pct = int(current_text.split(":")[1].strip().replace("%", ""))
+    except Exception:
+        cur_pct = 0
+
+    # animate fast drain (simulate tiny holes)
+    for p in range(cur_pct, -1, -1):
+        # motor is OFF while draining
+        draw_water(p, 0)
+        root.update()
+        time.sleep(0.01)  # adjust speed of draining here
+
+    # done draining: hide button and re-enable press
+    play_again_button.pack_forget()
+    play_again_button.config(state="normal")
+    press_button.config(state="normal")
+
+# wire the button to start the drain in a background thread
+play_again_button.config(command=lambda: threading.Thread(target=drain_simulation, daemon=True).start())
 
 draw_tank_frame()
 draw_water(0, 1)

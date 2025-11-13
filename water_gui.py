@@ -2,75 +2,119 @@ import tkinter as tk
 import time
 import threading
 
-# Simulated water levels (low, mid, high, motor_on, percentage)
+# levels: (percentage, motor_on)
+# motor_on = 1 => motor running (filling), 0 => motor off
 levels = [
-    (0, 0, 0, 1, "0%"),
-    (1, 0, 0, 1, "25%"),
-    (1, 1, 0, 1, "50%"),
-    (1, 1, 1, 0, "70%"),
-    (1, 1, 1, 0, "FULL")
+    (0, 1),    # 0%  - motor on (start filling)
+    (25, 1),   # 25% - motor on
+    (50, 1),   # 50% - motor on
+    (75, 1),   # 75% - motor on
+    (100, 0)   # 100% - full, motor off
 ]
 
 root = tk.Tk()
 root.title("Smart Water Control Simulation")
 
-canvas = tk.Canvas(root, width=250, height=320, bg="lightblue")
-canvas.pack(pady=10)
+WIDTH = 300
+HEIGHT = 420
+canvas = tk.Canvas(root, width=WIDTH, height=HEIGHT, bg="#e6f2ff")
+canvas.pack(padx=10, pady=8)
 
+# Labels
 motor_label = tk.Label(root, text="Motor: OFF", font=("Arial", 14))
-motor_label.pack(pady=5)
+motor_label.pack(pady=(4,2))
 
 level_label = tk.Label(root, text="Water Level: 0%", font=("Arial", 14))
-level_label.pack(pady=5)
+level_label.pack(pady=(0,8))
 
-# Draw tank function
-def draw_tank(low, mid, high, motor_on, level_text):
-    canvas.delete("all")
-    canvas.create_rectangle(70, 50, 170, 270, outline="black", width=3, fill="white")
+# Play/retry buttons (created here, packed later)
+def on_press():
+    # spawn thread so UI doesn't freeze
+    threading.Thread(target=run_simulation, daemon=True).start()
 
-    # Fill water levels
-    if low:
-        canvas.create_rectangle(70, 220, 170, 270, fill="blue")
-    if mid:
-        canvas.create_rectangle(70, 170, 170, 220, fill="blue")
-    if high:
-        canvas.create_rectangle(70, 100, 170, 170, fill="blue")
+press_button = tk.Button(root, text="Press", font=("Arial", 12, "bold"),
+                         bg="lightgreen", width=15, command=on_press)
 
-    # Motor status
-    motor_label.config(text=f"Motor: {'ON' if motor_on else 'OFF'}",
-                       fg="green" if motor_on else "red")
+play_again_button = tk.Button(root, text="Wanna play it again?", font=("Arial", 12),
+                              bg="lightyellow", width=20)
 
-    # Water level text
-    level_label.config(text=f"Water Level: {level_text}")
+# Tank geometry (centered)
+tank_left = 90
+tank_right = WIDTH - 90
+tank_top = 60
+tank_bottom = HEIGHT - 80
+tank_height = tank_bottom - tank_top
 
-# Animation function
+# draw tank frame once
+def draw_tank_frame():
+    canvas.delete("frame")
+    canvas.create_rectangle(tank_left, tank_top, tank_right, tank_bottom,
+                            outline="black", width=3, fill="white", tags="frame")
+    # tick marks / percent labels along side
+    for p in (0, 25, 50, 75, 100):
+        y = tank_bottom - (p / 100.0) * tank_height
+        canvas.create_line(tank_right + 6, y, tank_right + 18, y, tags="frame")
+        canvas.create_text(tank_right + 40, y, text=f"{p}%", anchor="w", font=("Arial", 9), tags="frame")
+
+# Draw water according to percentage (0-100) and motor status
+def draw_water(percent, motor_on):
+    # remove previous water shapes
+    canvas.delete("water")
+    # compute fill top y
+    fill_height = (percent / 100.0) * tank_height
+    y_top = tank_bottom - fill_height
+    # ensure full cover when 100
+    canvas.create_rectangle(tank_left + 2, y_top, tank_right - 2, tank_bottom - 2,
+                            fill="deepskyblue", outline="", tags="water")
+    # small waves (optional)
+    if percent >= 10:
+        canvas.create_oval(tank_left + 10, y_top - 6, tank_left + 40, y_top + 6, fill="blue", outline="", tags="water")
+        canvas.create_oval(tank_right - 40, y_top - 6, tank_right - 10, y_top + 6, fill="blue", outline="", tags="water")
+
+    # motor label
+    motor_label.config(text=f"Motor: {'ON' if motor_on else 'OFF'}", fg="green" if motor_on else "red")
+    level_label.config(text=f"Water Level: {percent}%")
+
+# simulation run (runs in background thread)
 def run_simulation():
-    press_button.config(state="disabled")  # Disable the start button
-    for (low, mid, high, motor_on, level_text) in levels:
-        draw_tank(low, mid, high, motor_on, level_text)
-        root.update()
-        time.sleep(1.5)
-    motor_label.config(text="Motor: OFF", fg="red")
-    level_label.config(text="Water Level: FULL ✅")
-    play_again_button.pack(pady=10)
-
-# Threaded start to avoid freezing
-def start_simulation():
-    threading.Thread(target=run_simulation).start()
-
-# Reset the GUI to play again
-def reset_simulation():
+    # disable start button while running
+    press_button.config(state="disabled")
     play_again_button.pack_forget()
-    draw_tank(0, 0, 0, 0, "0%")
+    # animate through levels
+    for (pct, motor) in levels:
+        # animate smooth rising from current to next (optional)
+        current_text = level_label.cget("text")
+        # get numeric current percent if shown, else 0
+        try:
+            cur_pct = int(current_text.split(":")[1].strip().replace("%", ""))
+        except Exception:
+            cur_pct = 0
+        step = 1 if pct >= cur_pct else -1
+        for p in range(cur_pct, pct + step, step):
+            draw_water(p, motor if p < pct else motor)  # keep motor as given; final state for that step
+            root.update()
+            time.sleep(0.02)  # smooth step
+        # small pause at each milestone
+        time.sleep(0.45)
+    # final state: when FULL ensure motor_off
+    draw_water(100, 0)
+    root.update()
+    # show replay button
+    play_again_button.pack(pady=12)
     press_button.config(state="normal")
 
-# Start and replay buttons
-press_button = tk.Button(root, text="Press", font=("Arial", 12, "bold"), bg="lightgreen", command=start_simulation)
-press_button.pack(pady=15)
+def reset_simulation():
+    # hide replay, set to initial empt y
+    play_again_button.pack_forget()
+    draw_water(0, 1)   # 0% and motor on
+    root.update()
 
-play_again_button = tk.Button(root, text="Wanna play it again?", font=("Arial", 12), bg="lightyellow", command=reset_simulation)
+# bind play again
+play_again_button.config(command=reset_simulation)
 
-# Initial tank view
-draw_tank(0, 0, 0, 0, "0%")
+# initial UI layout
+draw_tank_frame()
+draw_water(0, 1)    # show 0% initially with motor on
+press_button.pack(pady=10)
 
 root.mainloop()

@@ -31,7 +31,7 @@ def on_press():
 press_button = tk.Button(root, text="Press", font=("Arial", 12, "bold"),
                          bg="lightgreen", width=15, command=on_press)
 
-play_again_button = tk.Button(root, text="Wanna play it again?", font=("Arial", 12),
+play_again_button = tk.Button(root, text="drain water?", font=("Arial", 12),
                               bg="lightyellow", width=20)
 
 tank_left = 90
